@@ -97,3 +97,35 @@ class DailyBudget:
                 f"Dzisiejsze wydatki {spent:.2f} $ osiągnęły limit {self._limit:.2f} $."
             )
         logger.info("Wydatki dziś: %.2f $ z %.2f $.", spent, self._limit)
+
+
+METACULUS_ME_URL = "https://www.metaculus.com/api/users/me/"
+
+
+class NotABotAccount(RuntimeError):
+    pass
+
+
+def check_bot_account(token: str | None, get: Callable[..., Any] | None = None) -> str | None:
+    """Sprawdza, czy token należy do konta bota.
+
+    Metaculus wstrzymuje wysyłanie przez API z kont osobistych, więc bot
+    odmawia pracy, gdy Metaculus wprost odpowie, że to nie jest bot.
+    Przy chwilowym błędzie sieci tylko ostrzega (zwraca None).
+    """
+    get = get or requests.get
+    try:
+        response = get(
+            METACULUS_ME_URL, headers={"Authorization": f"Token {token}"}, timeout=TIMEOUT
+        )
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Nie udało się sprawdzić typu konta Metaculus: %s", exc)
+        return None
+    if data.get("is_bot") is False:
+        raise NotABotAccount(
+            f"Token należy do konta osobistego '{data.get('username')}', nie do konta bota. "
+            "Wpisz token konta bota (Metaculus: Settings → My Forecasting Bots)."
+        )
+    return data.get("username")

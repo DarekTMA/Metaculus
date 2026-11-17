@@ -94,3 +94,15 @@ def test_run_without_keys_reports_failure_to_healthcheck(monkeypatch):
 
 def test_reasoning_unused_import_guard():
     assert ReasonedPrediction and REASONING
+
+
+def test_bot_account_check():
+    from prognozy.ops import NotABotAccount, check_bot_account
+
+    bot = lambda *a, **k: FakeResponse({"username": "DarkaBOT", "is_bot": True})
+    human = lambda *a, **k: FakeResponse({"username": "darek", "is_bot": False})
+    down = lambda *a, **k: FakeResponse({}, 503)
+    assert check_bot_account("t", get=bot) == "DarkaBOT"
+    with pytest.raises(NotABotAccount):
+        check_bot_account("t", get=human)
+    assert check_bot_account("t", get=down) is None  # awaria sieci nie blokuje

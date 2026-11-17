@@ -112,7 +112,7 @@ def _cmd_check(settings: Settings) -> int:
 
 
 def _cmd_run(settings: Settings, mode: str, publish: bool) -> int:
-    from prognozy.ops import DailyBudget, Healthcheck
+    from prognozy.ops import DailyBudget, Healthcheck, NotABotAccount, check_bot_account
 
     health = Healthcheck(settings.healthcheck_url)
     health.start()
@@ -125,6 +125,15 @@ def _cmd_run(settings: Settings, mode: str, publish: bool) -> int:
             logger.error(p)
         health.fail("\n".join(problems))
         return 1
+
+    try:
+        bot_name = check_bot_account(os.getenv("METACULUS_TOKEN"))
+    except NotABotAccount as exc:
+        logger.error("%s", exc)
+        health.fail(str(exc))
+        return 1
+    if bot_name:
+        logger.info("Konto bota: %s", bot_name)
 
     from forecasting_tools import MetaculusClient
 
