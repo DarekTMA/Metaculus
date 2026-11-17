@@ -116,7 +116,7 @@ def check_bot_account(token: str | None, get: Callable[..., Any] | None = None) 
     get = get or requests.get
     try:
         response = get(
-            METACULUS_ME_URL, headers={"Authorization": f"Token {token}"}, timeout=TIMEOUT
+            METACULUS_ME_URL, headers={"Authorization": f"Token {token}"}, timeout=45
         )
         response.raise_for_status()
         data = response.json()
