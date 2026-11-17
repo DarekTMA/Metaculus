@@ -78,6 +78,7 @@ Wersje wszystkich bibliotek są przypięte w `requirements.lock`; `pyproject.tom
 | `PROGNOZY_BATCH_SIZE` | `5` | Co ile pytań sprawdzać budżet |
 | `PROGNOZY_LLM_RPM` | `15` | Najwyżej tyle zapytań na minutę do jednego modelu |
 | `PROGNOZY_PARALLEL_QUESTIONS` | `1` | Ile pytań prognozować naraz |
+| `PROGNOZY_PROMPT_CACHE` | `true` | Prompt caching dla modeli Claude (niższy koszt) |
 | `PROGNOZY_MODEL_DEFAULT` | wg biblioteki | Model końcowej prognozy |
 | `PROGNOZY_MODEL_PARSER` | wg biblioteki | Model odczytujący liczby z odpowiedzi |
 | `PROGNOZY_TOURNAMENT`, `PROGNOZY_MINIBENCH` | wg biblioteki | ID turniejów (na nowy sezon) |

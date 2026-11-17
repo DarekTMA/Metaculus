@@ -15,6 +15,7 @@ z nimi najlepiej.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import itertools
 import logging
 from datetime import datetime, timezone
@@ -57,6 +58,11 @@ _UNRESOLVED_NOTE = (
 )
 
 
+def _supports_prompt_cache(model: str) -> bool:
+    # Znacznik cache_control rozumieją modele Claude (bezpośrednio i przez OpenRouter).
+    return "claude" in model.lower()
+
+
 def _today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -94,6 +100,7 @@ class PrognozyBot(ForecastBot):
         researcher: Researcher,
         forecast_models: tuple[str, ...] = (),
         parallel_questions: int = 1,
+        prompt_cache: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -107,6 +114,12 @@ class PrognozyBot(ForecastBot):
             for m in forecast_models
         ]
         self._next_forecaster = itertools.count()
+        # Prompt caching: ten sam długi prompt idzie do modelu 5 razy. Pierwsze
+        # wywołanie zapisuje go w pamięci podręcznej dostawcy, kolejne płacą
+        # za tę część ok. 10% ceny. Pozostałe czekają, aż pierwsze się skończy,
+        # bo równoległe zapytania nie trafiłyby w świeży wpis.
+        self._prompt_cache = prompt_cache
+        self._cache_warmups: dict[tuple[str, str], asyncio.Event] = {}
 
     async def _run_individual_question(self, question):  # type: ignore[override]
         async with self._question_limiter:
@@ -117,10 +130,28 @@ class PrognozyBot(ForecastBot):
             return self.get_llm("default", "llm")
         return self._forecasters[next(self._next_forecaster) % len(self._forecasters)]
 
+    async def _invoke_with_cache(self, llm: GeneralLlm, prompt: str) -> str:
+        key = (llm.model, hashlib.sha256(prompt.encode()).hexdigest())
+        warmup = self._cache_warmups.get(key)
+        first = warmup is None
+        if first:
+            warmup = self._cache_warmups[key] = asyncio.Event()
+        else:
+            await warmup.wait()
+        message = [{"role": "user", "content": prompt, "cache_control": {"type": "ephemeral"}}]
+        try:
+            return await llm.invoke(message)  # type: ignore[arg-type]
+        finally:
+            if first:
+                warmup.set()
+
     async def _reason(self, prompt: str) -> str:
         """Jedno rozumowanie modelu. Nazwa modelu trafia do komentarza."""
         llm = self._forecaster()
-        reasoning = await llm.invoke(prompt)
+        if self._prompt_cache and _supports_prompt_cache(llm.model):
+            reasoning = await self._invoke_with_cache(llm, prompt)
+        else:
+            reasoning = await llm.invoke(prompt)
         return f"(model: {llm.model})\n\n{reasoning}"
 
     @staticmethod

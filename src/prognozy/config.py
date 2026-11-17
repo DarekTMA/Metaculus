@@ -85,6 +85,8 @@ class Settings:
     llm_rpm: int = 15
     # Ile pytań prognozować naraz.
     parallel_questions: int = 1
+    # Prompt caching dla modeli Claude (taniej przy kilku prognozach na pytanie).
+    prompt_cache: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -98,6 +100,7 @@ class Settings:
             batch_size=_env_int("PROGNOZY_BATCH_SIZE", 5),
             llm_rpm=_env_int("PROGNOZY_LLM_RPM", 15),
             parallel_questions=_env_int("PROGNOZY_PARALLEL_QUESTIONS", 1),
+            prompt_cache=_env_bool("PROGNOZY_PROMPT_CACHE", True),
             publish=_env_bool("PROGNOZY_PUBLISH", False),
             state_dir=Path(_env("PROGNOZY_STATE_DIR", "./stan")),
             predictions_per_question=_env_int("PROGNOZY_PREDICTIONS", 5),

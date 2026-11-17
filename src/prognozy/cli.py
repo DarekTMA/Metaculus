@@ -60,13 +60,21 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _default_parser_model() -> str | None:
+    """Tani model biblioteki (np. Claude Haiku) do układania zapytań o rynki."""
+    from forecasting_tools import ForecastBot, GeneralLlm
+
+    parser = ForecastBot._llm_config_defaults().get("parser")
+    return GeneralLlm.to_model_name(parser) if parser else None
+
+
 def _make_researcher(settings: Settings, cache: bool = False):
     from prognozy.research import Researcher, default_sources
 
     sources = default_sources(
         settings.search_models,
         markets=settings.markets,
-        market_query_model=settings.model_parser,
+        market_query_model=settings.model_parser or _default_parser_model(),
     )
     return Researcher(sources, settings.min_research_chars, cache=cache)
 
@@ -80,6 +88,7 @@ def _make_bot(settings: Settings, researcher, client, forecast_models: tuple[str
         researcher=researcher,
         forecast_models=forecast_models,
         parallel_questions=settings.parallel_questions,
+        prompt_cache=settings.prompt_cache,
         research_reports_per_question=1,
         predictions_per_research_report=settings.predictions_per_question,
         publish_reports_to_metaculus=False,  # wysyła Publisher, po kontroli
