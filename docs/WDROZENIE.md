@@ -39,7 +39,7 @@ Skrypt tworzy użytkownika, kopiuje kod do `/opt/prognozy`, instaluje zależnoś
 sudo nano /etc/prognozy/prognozy.env
 ```
 
-Wpisz `METACULUS_TOKEN`, `OPENROUTER_API_KEY` i (zalecane) `ASKNEWS_CLIENT_ID` / `ASKNEWS_SECRET`. Na razie zostaw `PROGNOZY_PUBLISH=false`.
+Wpisz `METACULUS_TOKEN`, `OPENROUTER_API_KEY` i (zalecane) `ASKNEWS_API_KEY`. Na razie zostaw `PROGNOZY_PUBLISH=false`.
 
 ```bash
 sudo bash /opt/prognozy/deploy/run-once.sh check

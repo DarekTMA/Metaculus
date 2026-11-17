@@ -66,7 +66,7 @@ Wersje wszystkich bibliotek są przypięte w `requirements.lock`; `pyproject.tom
 |---|---|---|
 | `METACULUS_TOKEN` | brak (wymagane) | Token konta bota |
 | `OPENROUTER_API_KEY` | brak (wymagane*) | Klucz do modeli; *albo `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` |
-| `ASKNEWS_CLIENT_ID`, `ASKNEWS_SECRET` | brak | Drugie źródło wiadomości (zalecane) |
+| `ASKNEWS_API_KEY` | brak | Drugie źródło wiadomości (zalecane; starsze konta: `ASKNEWS_CLIENT_ID` + `ASKNEWS_SECRET`) |
 | `PROGNOZY_PUBLISH` | `false` | Czy wysyłać prognozy |
 | `PROGNOZY_PREDICTIONS` | `5` | Ile prognoz na pytanie (mediana) |
 | `PROGNOZY_SEARCH_MODELS` | `openrouter/perplexity/sonar-pro` | Modele wyszukujące, po przecinku |

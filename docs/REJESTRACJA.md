@@ -28,10 +28,13 @@ Pamiętaj: **jeden właściciel = jeden bot kwalifikujący się do nagród.**
 
 ## 4. AskNews (drugie źródło wiadomości, co sezon)
 
-- Metaculus współpracuje z AskNews i daje uczestnikom darmowy dostęp. Instrukcja jest na stronie zasobów (sekcja o AskNews).
-- Z panelu AskNews skopiuj `ASKNEWS_CLIENT_ID` i `ASKNEWS_SECRET`.
-- Dostęp trzeba odnawiać co sezon.
-- Bez AskNews bot też działa (tylko z jednym źródłem), ale wyniki są zwykle słabsze.
+1. Załóż konto na https://my.asknews.app/ **na ten sam e-mail co konto bota na Metaculus**.
+2. Poproś o aktywację darmowego dostępu: mail na contact@asknews.app (albo wiadomość do @freqai na Discordzie AskNews) z nazwą bota, e-mailem konta AskNews, imieniem i nazwiskiem, profilem LinkedIn i informacją „independent”.
+3. Poczekaj na potwierdzenie, że darmowe wywołania są aktywne.
+4. Wygeneruj klucz na https://my.asknews.app/en/settings/api-credentials. To jest `ASKNEWS_API_KEY`.
+
+Limity: 1000 wywołań miesięcznie, 4000 na cały turniej. Jedno konto na osobę, tylko do tego konkursu, odnawiane co sezon.
+Bez AskNews bot też działa (wyszukiwanie przez OpenRouter + rynki), tylko z mniejszą liczbą źródeł.
 
 ## 5. Discord (opcjonalnie, ale warto)
 
@@ -49,7 +52,7 @@ https://discord.com/invite/NJgCC2nDfh
 - [ ] Konto bota założone, token zapisany na serwerze
 - [ ] Formularz uczestnika wypełniony (3 pytania + wniosek o kredyty)
 - [ ] Klucz OpenRouter (z kredytów albo własny z limitem)
-- [ ] AskNews: client ID + secret
+- [ ] AskNews: ASKNEWS_API_KEY
 - [ ] `prognozy check` na serwerze pokazuje OK
 - [ ] Próba na pytaniach testowych przeszła (WDROZENIE.md, krok 4)
 - [ ] Włączone wysyłanie i timer
