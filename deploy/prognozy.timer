@@ -1,0 +1,12 @@
+[Unit]
+Description=Prognozy: uruchamianie bota co 20 minut
+
+[Timer]
+# Co 20 minut, z przesunięciem od pełnej godziny.
+OnCalendar=*:07/20
+RandomizedDelaySec=60
+Persistent=true
+Unit=prognozy.service
+
+[Install]
+WantedBy=timers.target

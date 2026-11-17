@@ -1,0 +1,16 @@
+# Klucze i lokalny stan: nigdy do repozytorium
+.env
+*.env
+!deploy/prognozy.env.example
+stan/
+*.sqlite
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/

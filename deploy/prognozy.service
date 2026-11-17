@@ -1,0 +1,42 @@
+# Bot prognozujący Metaculus. Osobna usługa: własny użytkownik, katalog i klucze.
+# Nie współdzieli niczego z innymi usługami na serwerze (np. Numerai).
+[Unit]
+Description=Prognozy: bot konkursow Metaculus (jedno przejscie)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=prognozy
+Group=prognozy
+# Katalog roboczy = katalog stanu, więc ewentualne pliki bibliotek lądują tylko tam.
+WorkingDirectory=/var/lib/prognozy
+EnvironmentFile=/etc/prognozy/prognozy.env
+Environment=PROGNOZY_STATE_DIR=/var/lib/prognozy
+Environment=HOME=/var/lib/prognozy
+Environment=XDG_CACHE_HOME=/var/lib/prognozy/.cache
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/prognozy/.venv/bin/prognozy run --mode tournament
+# Jedno przejście nie powinno trwać dłużej niż godzina.
+TimeoutStartSec=60min
+Nice=10
+
+# Katalog stanu (rejestr wysłanych prognoz): /var/lib/prognozy
+StateDirectory=prognozy
+StateDirectoryMode=0700
+
+# Utwardzenie: usługa widzi tylko swoje katalogi.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/prognozy
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=1G

@@ -1,0 +1,28 @@
+[project]
+name = "prognozy"
+version = "0.1.0"
+description = "Bot prognozujący do konkursów botów Metaculus (FutureEval, MiniBench)"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    # Oficjalna biblioteka Metaculus (MIT): klient API, modele pytań, budowa CDF.
+    "forecasting-tools>=0.3.7,<0.4",
+    "asknews>=0.13.11,<0.14",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+prognozy = "prognozy.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

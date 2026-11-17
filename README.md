@@ -1,0 +1,71 @@
+# Prognozy: bot do konkursów Metaculus
+
+Bot sam bierze udział w konkursach botów AI na Metaculus (FutureEval co 4 miesiące, MiniBench co 2 tygodnie):
+
+1. pobiera otwarte pytania,
+2. szuka informacji z kilku źródeł naraz,
+3. robi 5 niezależnych prognoz i bierze medianę,
+4. sprawdza prognozę bezpiecznikami i wysyła ją z komentarzem-uzasadnieniem.
+
+Działa jako **osobna usługa** na VPS: ma własnego użytkownika (`prognozy`), własny katalog (`/opt/prognozy`), własne klucze (`/etc/prognozy/prognozy.env`) i własny stan (`/var/lib/prognozy`). Nie korzysta z niczego, czego używają inne usługi na serwerze (np. Numerai), i nic im nie udostępnia.
+
+## Dokumenty
+
+| Plik | Co zawiera |
+|---|---|
+| [docs/REJESTRACJA.md](docs/REJESTRACJA.md) | Co właściciel zakłada na Metaculus, krok po kroku |
+| [docs/WDROZENIE.md](docs/WDROZENIE.md) | Instalacja na VPS, pierwsze uruchomienie, logi, aktualizacja |
+| [docs/ZASADY.md](docs/ZASADY.md) | Zasady konkursu, których bot i właściciel muszą pilnować |
+| [docs/PLAN.md](docs/PLAN.md) | Co jest zrobione i kolejne ulepszenia |
+
+## Jak to jest zbudowane
+
+Bot stoi na oficjalnej bibliotece Metaculus [`forecasting-tools`](https://github.com/Metaculus/forecasting-tools) (licencja MIT). Biblioteka odpowiada za klienta API, modele pytań i budowę rozkładów liczbowych. Nasz kod to:
+
+| Moduł | Rola |
+|---|---|
+| `src/prognozy/bot.py` | Prompty i prognozy dla pytań binarnych, wielokrotnego wyboru, liczbowych i dat |
+| `src/prognozy/research.py` | Wyszukiwanie z kilku źródeł równolegle (AskNews + model wyszukujący). Gdy żadne źródło nie odpowie, pytanie jest pomijane |
+| `src/prognozy/guards.py` | Bezpieczniki: komentarz obowiązkowy, zakres binarny 1–99%, poprawne opcje, rosnąca CDF z właściwymi granicami |
+| `src/prognozy/ledger.py` | Rejestr wysłanych prognoz (SQLite), który chroni przed dublami i pozwala dosłać brakujący komentarz |
+| `src/prognozy/publisher.py` | Wysyłka: najpierw bezpieczniki i rejestr, dopiero potem Metaculus |
+| `src/prognozy/runner.py` | Jedno przejście: turnieje, wybór pytań, prognozy, wysyłka |
+| `src/prognozy/cli.py` | Polecenie `prognozy check` / `prognozy run` |
+| `deploy/` | Usługa i timer systemd, instalator, wzór pliku z kluczami |
+
+## Szybki start lokalnie
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+pytest                       # testy offline, bez kluczy i bez sieci
+prognozy check               # pokazuje, czego brakuje w konfiguracji
+```
+
+Z kluczami w środowisku:
+
+```bash
+prognozy run --mode test --dry-run      # pytania testowe, nic nie wysyła
+prognozy run --mode test --publish      # wysyła na pytania testowe (bot-testing-area)
+prognozy run --mode minibench --publish
+prognozy run --mode tournament --publish  # główny turniej + MiniBench
+```
+
+**Domyślnie bot niczego nie wysyła.** Wysyłanie włącza `--publish` albo `PROGNOZY_PUBLISH=true`.
+
+## Ustawienia (zmienne środowiskowe)
+
+| Zmienna | Domyślnie | Znaczenie |
+|---|---|---|
+| `METACULUS_TOKEN` | brak (wymagane) | Token konta bota |
+| `OPENROUTER_API_KEY` | brak (wymagane*) | Klucz do modeli; *albo `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` |
+| `ASKNEWS_CLIENT_ID`, `ASKNEWS_SECRET` | brak | Drugie źródło wiadomości (zalecane) |
+| `PROGNOZY_PUBLISH` | `false` | Czy wysyłać prognozy |
+| `PROGNOZY_PREDICTIONS` | `5` | Ile prognoz na pytanie (mediana) |
+| `PROGNOZY_SEARCH_MODELS` | `openrouter/perplexity/sonar-pro` | Modele wyszukujące, po przecinku |
+| `PROGNOZY_MODEL_DEFAULT` | wg biblioteki | Model końcowej prognozy |
+| `PROGNOZY_MODEL_PARSER` | wg biblioteki | Model odczytujący liczby z odpowiedzi |
+| `PROGNOZY_TOURNAMENT`, `PROGNOZY_MINIBENCH` | wg biblioteki | ID turniejów (na nowy sezon) |
+| `PROGNOZY_STATE_DIR` | `./stan` | Katalog rejestru (na VPS `/var/lib/prognozy`) |
+
+Klucze są tylko w zmiennych środowiskowych. W logach ich wartości są zastępowane `***`.
