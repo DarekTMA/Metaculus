@@ -13,6 +13,7 @@ import os
 from prognozy.config import SECRET_ENV_VARS
 
 MASK = "***"
+MAX_MESSAGE_CHARS = 1500  # błędy bibliotek potrafią mieć kilkadziesiąt tysięcy znaków
 _MIN_SECRET_LEN = 6  # krótszych wartości nie maskujemy (np. "1"), żeby nie psuć logów
 
 
@@ -38,9 +39,9 @@ class SecretRedactingFilter(logging.Filter):
         self._secrets = _secret_values()
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not self._secrets:
-            return True
         message = redact(record.getMessage(), self._secrets)
+        if len(message) > MAX_MESSAGE_CHARS:
+            message = message[:MAX_MESSAGE_CHARS] + f" … [ucięto {len(message) - MAX_MESSAGE_CHARS} znaków]"
         record.msg = message
         record.args = None
         if record.exc_info and not record.exc_text:

@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 import requests
-from forecasting_tools import GeneralLlm, MetaculusQuestion
+from forecasting_tools import MetaculusQuestion
+
+from prognozy.throttle import ThrottledLlm
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,7 @@ def llm_query_maker(model: str) -> QueryMaker:
             f"Question: {question.question_text}"
         )
         try:
-            text = await GeneralLlm(model=model, temperature=0.0, timeout=60).invoke(prompt)
+            text = await ThrottledLlm(model=model, temperature=0.0, timeout=60).invoke(prompt)
             match = re.search(r"\[.*\]", text, re.S)
             queries = json.loads(match.group(0)) if match else []
             queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]

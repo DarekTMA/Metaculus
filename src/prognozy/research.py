@@ -14,7 +14,9 @@ import os
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
-from forecasting_tools import AskNewsSearcher, GeneralLlm, MetaculusQuestion, clean_indents
+from forecasting_tools import AskNewsSearcher, MetaculusQuestion, clean_indents
+
+from prognozy.throttle import ThrottledLlm
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ def _asknews_source() -> Source:
 
 def _llm_search_source(model: str) -> Source:
     async def fetch(question: MetaculusQuestion) -> str:
-        llm = GeneralLlm(model=model, temperature=0.1, timeout=180, allowed_tries=2)
+        llm = ThrottledLlm(model=model, temperature=0.1, timeout=180, allowed_tries=3)
         return await llm.invoke(research_prompt(question))
 
     return Source(model, fetch)

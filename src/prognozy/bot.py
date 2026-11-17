@@ -39,6 +39,7 @@ from forecasting_tools import (
 
 from prognozy.guards import BINARY_MAX, BINARY_MIN
 from prognozy.research import Researcher
+from prognozy.throttle import ThrottledLlm, throttled
 
 logger = logging.getLogger(__name__)
 
@@ -92,17 +93,24 @@ class PrognozyBot(ForecastBot):
         *,
         researcher: Researcher,
         forecast_models: tuple[str, ...] = (),
+        parallel_questions: int = 1,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self._researcher = researcher
         self._limiter = asyncio.Semaphore(self._max_concurrent_questions)
+        # Ile pytań naraz. 1 = najbezpieczniej przy limitach zapytań nowych kont.
+        self._question_limiter = asyncio.Semaphore(max(1, parallel_questions))
         # Uśrednianie kilku modeli: kolejne prognozy idą po kolei do kolejnych modeli.
         self._forecasters = [
-            GeneralLlm(model=m, temperature=0.3, timeout=180, allowed_tries=2)
+            ThrottledLlm(model=m, temperature=0.3, timeout=180, allowed_tries=3)
             for m in forecast_models
         ]
         self._next_forecaster = itertools.count()
+
+    async def _run_individual_question(self, question):  # type: ignore[override]
+        async with self._question_limiter:
+            return await super()._run_individual_question(question)
 
     def _forecaster(self) -> GeneralLlm:
         if not self._forecasters:
@@ -131,7 +139,8 @@ class PrognozyBot(ForecastBot):
             llms["summarizer"] = GeneralLlm(model=summarizer, temperature=0.3)
         # Wyszukiwanie robi nasz Researcher, nie domyślny "researcher" biblioteki.
         llms["researcher"] = None
-        return llms
+        # Każdy model z ogranicznikiem zapytań na minutę.
+        return {purpose: throttled(llm) for purpose, llm in llms.items()}
 
     # ------------------------------------------------------------- RESEARCH
 

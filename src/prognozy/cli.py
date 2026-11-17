@@ -72,11 +72,14 @@ def _make_researcher(settings: Settings, cache: bool = False):
 
 
 def _make_bot(settings: Settings, researcher, client, forecast_models: tuple[str, ...]):
+    from prognozy import throttle
     from prognozy.bot import PrognozyBot
 
+    throttle.configure(settings.llm_rpm)
     return PrognozyBot(
         researcher=researcher,
         forecast_models=forecast_models,
+        parallel_questions=settings.parallel_questions,
         research_reports_per_question=1,
         predictions_per_research_report=settings.predictions_per_question,
         publish_reports_to_metaculus=False,  # wysyła Publisher, po kontroli

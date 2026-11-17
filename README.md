@@ -28,6 +28,7 @@ Bot stoi na oficjalnej bibliotece Metaculus [`forecasting-tools`](https://github
 | `src/prognozy/bot.py` | Prompty i prognozy dla pytań binarnych, wielokrotnego wyboru, liczbowych i dat |
 | `src/prognozy/research.py` | Wyszukiwanie z kilku źródeł równolegle (AskNews + model wyszukujący). Gdy żadne główne źródło nie odpowie, pytanie jest pomijane |
 | `src/prognozy/markets.py` | Notowania Polymarket i Manifold (źródło dodatkowe, bez kluczy) |
+| `src/prognozy/throttle.py` | Ogranicznik zapytań na minutę, osobno dla każdego modelu |
 | `src/prognozy/ops.py` | Powiadomienia healthchecks.io i dzienny limit wydatków OpenRouter |
 | `src/prognozy/compare.py` | Porównanie modeli na otwartych pytaniach spoza turniejów, względem prognozy społeczności |
 | `src/prognozy/guards.py` | Bezpieczniki: komentarz obowiązkowy, zakres binarny 1–99%, poprawne opcje, rosnąca CDF z właściwymi granicami |
@@ -75,6 +76,8 @@ Wersje wszystkich bibliotek są przypięte w `requirements.lock`; `pyproject.tom
 | `PROGNOZY_HEALTHCHECK_URL` | brak | Adres pingu healthchecks.io |
 | `PROGNOZY_DAILY_BUDGET_USD` | brak | Dzienny limit wydatków OpenRouter w $ |
 | `PROGNOZY_BATCH_SIZE` | `5` | Co ile pytań sprawdzać budżet |
+| `PROGNOZY_LLM_RPM` | `15` | Najwyżej tyle zapytań na minutę do jednego modelu |
+| `PROGNOZY_PARALLEL_QUESTIONS` | `1` | Ile pytań prognozować naraz |
 | `PROGNOZY_MODEL_DEFAULT` | wg biblioteki | Model końcowej prognozy |
 | `PROGNOZY_MODEL_PARSER` | wg biblioteki | Model odczytujący liczby z odpowiedzi |
 | `PROGNOZY_TOURNAMENT`, `PROGNOZY_MINIBENCH` | wg biblioteki | ID turniejów (na nowy sezon) |

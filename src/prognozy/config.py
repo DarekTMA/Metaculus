@@ -81,6 +81,10 @@ class Settings:
     daily_budget_usd: float | None = None
     # Ile pytań między kolejnymi sprawdzeniami budżetu.
     batch_size: int = 5
+    # Najwyżej tyle zapytań na minutę do jednego modelu (nowe konta OpenRouter: limit 20).
+    llm_rpm: int = 15
+    # Ile pytań prognozować naraz.
+    parallel_questions: int = 1
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -92,6 +96,8 @@ class Settings:
             healthcheck_url=_env("PROGNOZY_HEALTHCHECK_URL"),
             daily_budget_usd=float(budget) if budget else None,
             batch_size=_env_int("PROGNOZY_BATCH_SIZE", 5),
+            llm_rpm=_env_int("PROGNOZY_LLM_RPM", 15),
+            parallel_questions=_env_int("PROGNOZY_PARALLEL_QUESTIONS", 1),
             publish=_env_bool("PROGNOZY_PUBLISH", False),
             state_dir=Path(_env("PROGNOZY_STATE_DIR", "./stan")),
             predictions_per_question=_env_int("PROGNOZY_PREDICTIONS", 5),
