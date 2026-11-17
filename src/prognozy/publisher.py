@@ -44,6 +44,24 @@ class PublishSummary:
     skipped_duplicates: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     comments_repaired: list[int] = field(default_factory=list)
+    fetch_failed: bool = False
+    budget_stopped: bool = False
+
+    def one_line(self) -> str:
+        text = (
+            f"wysłane={len(self.published)}, odrzucone={len(self.rejected)}, "
+            f"duble={len(self.skipped_duplicates)}, błędy={len(self.failed)}, "
+            f"dosłane komentarze={len(self.comments_repaired)}"
+        )
+        if self.budget_stopped:
+            text += ", ZATRZYMANE PRZEZ LIMIT WYDATKÓW"
+        return text
+
+    def report(self) -> str:
+        lines = [self.one_line()]
+        for title, items in (("Odrzucone", self.rejected), ("Błędy", self.failed)):
+            lines += [f"{title}:"] + [f"  {i}" for i in items] if items else []
+        return "\n".join(lines)
 
 
 class Publisher:

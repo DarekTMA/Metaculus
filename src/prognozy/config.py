@@ -23,6 +23,7 @@ SECRET_ENV_VARS = (
     "ASKNEWS_API_KEY",
     "PERPLEXITY_API_KEY",
     "EXA_API_KEY",
+    "PROGNOZY_HEALTHCHECK_URL",  # kto zna adres, może fałszować pingi
 )
 
 LLM_KEY_VARS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
@@ -69,11 +70,28 @@ class Settings:
     model_summarizer: str | None = None
     # Lista modeli wyszukujących (przez OpenRouter/OpenAI), oddzielona przecinkami.
     search_models: tuple[str, ...] = field(default_factory=tuple)
+    # Kilka modeli do końcowej prognozy: prognozy rozkładają się po kolei na modele.
+    # Pusta lista = jeden model (model_default albo domyślny z biblioteki).
+    forecast_models: tuple[str, ...] = field(default_factory=tuple)
+    # Notowania Polymarket/Manifold jako dodatkowe źródło.
+    markets: bool = True
+    # Adres pingu healthchecks.io (pusty = bez powiadomień).
+    healthcheck_url: str | None = None
+    # Dzienny limit wydatków na OpenRouter w $ (pusty = bez limitu w bocie).
+    daily_budget_usd: float | None = None
+    # Ile pytań między kolejnymi sprawdzeniami budżetu.
+    batch_size: int = 5
 
     @classmethod
     def from_env(cls) -> "Settings":
         search = _env("PROGNOZY_SEARCH_MODELS")
+        budget = _env("PROGNOZY_DAILY_BUDGET_USD")
         return cls(
+            forecast_models=_csv(_env("PROGNOZY_FORECAST_MODELS")),
+            markets=_env_bool("PROGNOZY_MARKETS", True),
+            healthcheck_url=_env("PROGNOZY_HEALTHCHECK_URL"),
+            daily_budget_usd=float(budget) if budget else None,
+            batch_size=_env_int("PROGNOZY_BATCH_SIZE", 5),
             publish=_env_bool("PROGNOZY_PUBLISH", False),
             state_dir=Path(_env("PROGNOZY_STATE_DIR", "./stan")),
             predictions_per_question=_env_int("PROGNOZY_PREDICTIONS", 5),
@@ -81,10 +99,12 @@ class Settings:
             model_default=_env("PROGNOZY_MODEL_DEFAULT"),
             model_parser=_env("PROGNOZY_MODEL_PARSER"),
             model_summarizer=_env("PROGNOZY_MODEL_SUMMARIZER"),
-            search_models=tuple(
-                s.strip() for s in (search or "").split(",") if s.strip()
-            ),
+            search_models=_csv(search),
         )
+
+
+def _csv(value: str | None) -> tuple[str, ...]:
+    return tuple(s.strip() for s in (value or "").split(",") if s.strip())
 
 
 def missing_requirements() -> list[str]:

@@ -1,6 +1,6 @@
 [project]
 name = "prognozy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Bot prognozujący do konkursów botów Metaculus (FutureEval, MiniBench)"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"

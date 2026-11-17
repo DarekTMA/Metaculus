@@ -30,7 +30,9 @@ tar -C "$SRC_DIR" --exclude=.git --exclude=.venv --exclude=stan --exclude='*.env
 cd "$APP_DIR"
 if command -v uv >/dev/null 2>&1; then
   uv venv --python 3.12 --allow-existing .venv
-  uv pip install --python .venv/bin/python --reinstall-package prognozy .
+  # Dokładne wersje z requirements.lock, potem sam pakiet bez zależności.
+  uv pip install --python .venv/bin/python -r requirements.lock
+  uv pip install --python .venv/bin/python --reinstall-package prognozy --no-deps .
 else
   PY=${PYTHON:-python3}
   "$PY" - <<'EOF'
@@ -40,7 +42,8 @@ if not ((3, 11) <= sys.version_info[:2] <= (3, 13)):
 EOF
   "$PY" -m venv .venv
   .venv/bin/pip install --quiet --upgrade pip
-  .venv/bin/pip install --quiet --force-reinstall --no-deps . && .venv/bin/pip install --quiet .
+  .venv/bin/pip install --quiet -r requirements.lock
+  .venv/bin/pip install --quiet --force-reinstall --no-deps .
 fi
 
 # 4. Plik z kluczami (tworzony tylko raz; potem edytujesz go ręcznie).

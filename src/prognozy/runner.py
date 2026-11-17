@@ -9,6 +9,7 @@ from forecasting_tools import ApiFilter, ForecastBot, MetaculusClient, Metaculus
 
 from prognozy import guards
 from prognozy.ledger import Ledger
+from prognozy.ops import BudgetExceeded, DailyBudget
 from prognozy.publisher import Publisher, PublishSummary
 
 logger = logging.getLogger(__name__)
@@ -48,38 +49,40 @@ async def run_once(
     tournaments: list[int | str],
     dry_run: bool,
     skip_forecasted: bool = True,
+    budget: DailyBudget | None = None,
+    batch_size: int = 5,
 ) -> PublishSummary:
     summary = PublishSummary()
     publisher = Publisher(client, ledger, dry_run=dry_run)
     publisher.repair_missing_comments(summary)
 
-    for tournament in tournaments:
-        try:
-            questions = await fetch_open_questions(client, tournament)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Nie udało się pobrać pytań z %s: %s", tournament, exc)
-            summary.failed.append(f"{tournament}: pobieranie pytań: {exc}")
-            continue
-        todo = select_questions(questions, ledger, skip_forecasted=skip_forecasted)
-        logger.info("%s: %d otwartych, %d do prognozy.", tournament, len(questions), len(todo))
-        if not todo:
-            continue
-
-        results = await bot.forecast_questions(todo, return_exceptions=True)
-        for question, result in zip(todo, results):
-            if isinstance(result, BaseException):
-                # Np. brak informacji ze źródeł: pytanie pomijamy, spróbujemy przy następnym uruchomieniu.
-                logger.warning("Pominięto %s: %s", question.page_url, result)
-                summary.failed.append(f"{question.page_url}: {type(result).__name__}")
+    try:
+        for tournament in tournaments:
+            try:
+                questions = await fetch_open_questions(client, tournament)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Nie udało się pobrać pytań z %s: %s", tournament, exc)
+                summary.failed.append(f"{tournament}: pobieranie pytań: {exc}")
+                summary.fetch_failed = True
                 continue
-            await publisher.publish(result, summary)
+            todo = select_questions(questions, ledger, skip_forecasted=skip_forecasted)
+            logger.info("%s: %d otwartych, %d do prognozy.", tournament, len(questions), len(todo))
 
-    logger.info(
-        "Podsumowanie: wysłane=%d, odrzucone=%d, duble=%d, błędy=%d, dosłane komentarze=%d",
-        len(summary.published),
-        len(summary.rejected),
-        len(summary.skipped_duplicates),
-        len(summary.failed),
-        len(summary.comments_repaired),
-    )
+            for start in range(0, len(todo), max(1, batch_size)):
+                if budget is not None:
+                    budget.check()
+                batch = todo[start : start + batch_size]
+                results = await bot.forecast_questions(batch, return_exceptions=True)
+                for question, result in zip(batch, results):
+                    if isinstance(result, BaseException):
+                        # Np. brak informacji ze źródeł: pomijamy, wróci przy następnym przejściu.
+                        logger.warning("Pominięto %s: %s", question.page_url, result)
+                        summary.failed.append(f"{question.page_url}: {type(result).__name__}")
+                        continue
+                    await publisher.publish(result, summary)
+    except BudgetExceeded as exc:
+        logger.warning("Koniec przejścia: %s Pozostałe pytania wrócą później.", exc)
+        summary.budget_stopped = True
+
+    logger.info("Podsumowanie: %s", summary.one_line())
     return summary

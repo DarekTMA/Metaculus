@@ -3,7 +3,8 @@
 Przebieg dla jednego pytania (sterowany przez ForecastBot):
 1. ``run_research``: kilka źródeł naraz (patrz research.py); brak informacji
    oznacza pominięcie pytania.
-2. N niezależnych prognoz tym samym modelem (domyślnie 5).
+2. N niezależnych prognoz (domyślnie 5), jednym modelem albo po kolei
+   kilkoma (PROGNOZY_FORECAST_MODELS).
 3. Mediana prognoz (agregacja z biblioteki). Bez sztucznego przesuwania do
    skrajności.
 
@@ -14,6 +15,7 @@ z nimi najlepiej.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 from datetime import datetime, timezone
 
@@ -85,10 +87,33 @@ class PrognozyBot(ForecastBot):
     _max_concurrent_questions = 2
     _structure_output_validation_samples = 2
 
-    def __init__(self, *, researcher: Researcher, **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        researcher: Researcher,
+        forecast_models: tuple[str, ...] = (),
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self._researcher = researcher
         self._limiter = asyncio.Semaphore(self._max_concurrent_questions)
+        # Uśrednianie kilku modeli: kolejne prognozy idą po kolei do kolejnych modeli.
+        self._forecasters = [
+            GeneralLlm(model=m, temperature=0.3, timeout=180, allowed_tries=2)
+            for m in forecast_models
+        ]
+        self._next_forecaster = itertools.count()
+
+    def _forecaster(self) -> GeneralLlm:
+        if not self._forecasters:
+            return self.get_llm("default", "llm")
+        return self._forecasters[next(self._next_forecaster) % len(self._forecasters)]
+
+    async def _reason(self, prompt: str) -> str:
+        """Jedno rozumowanie modelu. Nazwa modelu trafia do komentarza."""
+        llm = self._forecaster()
+        reasoning = await llm.invoke(prompt)
+        return f"(model: {llm.model})\n\n{reasoning}"
 
     @staticmethod
     def build_llms(
@@ -136,7 +161,7 @@ class PrognozyBot(ForecastBot):
             The last thing you write is your final answer as: "Probability: ZZ%", 0-100
             """
         )
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._reason(prompt)
         parsed: BinaryPrediction = await structure_output(
             reasoning,
             BinaryPrediction,
@@ -176,7 +201,7 @@ class PrognozyBot(ForecastBot):
             ...
             """
         )
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._reason(prompt)
         parsed: PredictedOptionList = await structure_output(
             text_to_structure=reasoning,
             output_type=PredictedOptionList,
@@ -274,7 +299,7 @@ class PrognozyBot(ForecastBot):
             Percentile 90: XX
             """
         )
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._reason(prompt)
         percentiles: list[Percentile] = await structure_output(
             reasoning,
             list[Percentile],
@@ -317,7 +342,7 @@ class PrognozyBot(ForecastBot):
             Percentile 90: YYYY-MM-DD
             """
         )
-        reasoning = await self.get_llm("default", "llm").invoke(prompt)
+        reasoning = await self._reason(prompt)
         date_percentiles: list[DatePercentile] = await structure_output(
             reasoning,
             list[DatePercentile],

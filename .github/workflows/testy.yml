@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      # Te same wersje co na serwerze.
+      - run: pip install -r requirements.lock pytest && pip install --no-deps -e .
       # Testy są offline: bez kluczy i bez sieci (atrapy API).
       - run: pytest

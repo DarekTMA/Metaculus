@@ -29,6 +29,9 @@ class ResearchUnavailable(RuntimeError):
 class Source:
     name: str
     fetch: SourceFn
+    # Źródło dodatkowe (np. notowania rynków): dołączane, jeśli coś zwróci,
+    # ale samo nie wystarcza, żeby uznać research za udany.
+    supplementary: bool = False
 
 
 def research_prompt(question: MetaculusQuestion) -> str:
@@ -71,7 +74,19 @@ def _llm_search_source(model: str) -> Source:
     return Source(model, fetch)
 
 
-def default_sources(search_models: tuple[str, ...] = ()) -> list[Source]:
+def market_source(query_model: str | None = None) -> Source:
+    from prognozy.markets import MarketSearch, llm_query_maker
+
+    search = MarketSearch(llm_query_maker(query_model) if query_model else None)
+    return Source("prediction-markets", search.fetch, supplementary=True)
+
+
+def default_sources(
+    search_models: tuple[str, ...] = (),
+    *,
+    markets: bool = False,
+    market_query_model: str | None = None,
+) -> list[Source]:
     """Dobiera źródła do kluczy, które są w środowisku."""
     sources: list[Source] = []
     if (os.getenv("ASKNEWS_CLIENT_ID") and os.getenv("ASKNEWS_SECRET")) or os.getenv(
@@ -85,38 +100,59 @@ def default_sources(search_models: tuple[str, ...] = ()) -> list[Source]:
         elif os.getenv("OPENROUTER_API_KEY"):
             models = ["openrouter/perplexity/sonar-pro"]
     sources.extend(_llm_search_source(m) for m in models)
+    if markets:
+        sources.append(market_source(market_query_model))
     return sources
 
 
 class Researcher:
-    def __init__(self, sources: list[Source], min_chars: int = 200) -> None:
+    def __init__(self, sources: list[Source], min_chars: int = 200, cache: bool = False) -> None:
         self._sources = sources
         self._min_chars = min_chars
+        # Pamięć podręczna na czas jednego procesu: przy porównaniu modeli
+        # każdy wariant dostaje ten sam research i nie płacimy za niego kilka razy.
+        self._cache: dict[int | str, str] | None = {} if cache else None
 
     @property
     def source_names(self) -> list[str]:
         return [s.name for s in self._sources]
 
+    @property
+    def has_primary_source(self) -> bool:
+        return any(not s.supplementary for s in self._sources)
+
     async def run(self, question: MetaculusQuestion) -> str:
-        if not self._sources:
-            raise ResearchUnavailable("Nie skonfigurowano żadnego źródła informacji.")
+        key = question.id_of_question or question.question_text
+        if self._cache is not None and key in self._cache:
+            return self._cache[key]
+        if not self.has_primary_source:
+            raise ResearchUnavailable("Nie skonfigurowano żadnego głównego źródła informacji.")
 
         results = await asyncio.gather(
             *(s.fetch(question) for s in self._sources), return_exceptions=True
         )
         sections: list[str] = []
+        primary_ok = False
         for source, result in zip(self._sources, results):
             if isinstance(result, BaseException):
                 logger.warning("Źródło %s nie zadziałało: %s", source.name, result)
                 continue
             text = (result or "").strip()
+            if source.supplementary:
+                if text:
+                    sections.append(f"## Source: {source.name}\n{text}")
+                continue
             if len(text) < self._min_chars:
                 logger.warning("Źródło %s zwróciło za mało treści.", source.name)
                 continue
+            primary_ok = True
             sections.append(f"## Source: {source.name}\n{text}")
 
-        if not sections:
+        if not primary_ok:
             raise ResearchUnavailable(
-                f"Żadne źródło nie dało informacji dla {question.page_url}."
+                f"Żadne główne źródło nie dało informacji dla {question.page_url}."
             )
-        return "\n\n".join(sections)
+        research = "\n\n".join(sections)
+        if self._cache is not None:
+            self._cache[key] = research
+        return research

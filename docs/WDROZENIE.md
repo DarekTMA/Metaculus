@@ -45,7 +45,20 @@ Wpisz `METACULUS_TOKEN`, `OPENROUTER_API_KEY` i (zalecane) `ASKNEWS_CLIENT_ID` /
 sudo bash /opt/prognozy/deploy/run-once.sh check
 ```
 
-Ma pokazać `OK` i co najmniej jedno źródło informacji (najlepiej dwa).
+Ma pokazać `OK` i co najmniej jedno źródło informacji (najlepiej dwa plus `prediction-markets`).
+
+### Powiadomienia o awarii (5 minut, zalecane)
+
+1. Załóż darmowe konto na https://healthchecks.io i dodaj nowy check („Add Check”).
+2. Ustaw **Period: 20 minut** i **Grace: 1 godzina**. Mail przyjdzie, gdy bot przez ponad godzinę nie zgłosi udanego przejścia albo zgłosi błąd.
+3. Skopiuj adres pingu (`https://hc-ping.com/…`) do `PROGNOZY_HEALTHCHECK_URL` w pliku z kluczami.
+
+W treści pingu jest podsumowanie przejścia, więc w panelu healthchecks widać też, ile prognoz poszło.
+
+### Limit wydatków
+
+- `PROGNOZY_DAILY_BUDGET_USD` (domyślnie 5 $): przed każdą porcją 5 pytań bot pyta OpenRouter o dzisiejsze zużycie klucza i po przekroczeniu limitu kończy przejście. Pozostałe pytania wrócą następnego dnia.
+- Limit w bocie może przekroczyć próg o koszt jednej porcji. Dlatego **ustaw też twardy limit na samym kluczu w panelu OpenRouter** (Settings → Keys → limit kredytów).
 
 ## 4. Próba na pytaniach testowych
 
@@ -87,6 +100,20 @@ Każde przejście kończy się w logu linią `Podsumowanie: wysłane=…, odrzuc
 
 **Uwaga na zasady:** logi pokazują, *czy* bot działa. Nie poprawiaj promptów ani ustawień na podstawie tego, co bot prognozuje na otwartych pytaniach turnieju (patrz ZASADY.md).
 
+## Porównanie modeli (przed sezonem i po zmianach)
+
+```bash
+sudo bash /opt/prognozy/deploy/run-once.sh porownaj \
+  --modele openrouter/openai/gpt-5.4,openrouter/anthropic/claude-opus-5.5,openrouter/openai/gpt-5.4+openrouter/anthropic/claude-opus-5.5 \
+  --pytania 30
+```
+
+- Bot prognozuje (bez wysyłania) na otwartych pytaniach Metaculus **spoza turniejów botów** i porównuje się z prognozą społeczności. Pytania turniejowe są odfiltrowane, więc to nie łamie zasady „bez człowieka w pętli”.
+- Wariant z `+` to zespół modeli. Research jest wspólny dla wszystkich wariantów, więc płacimy za niego raz.
+- Koszt: mniej więcej liczba pytań × 5 prognoz × liczba wariantów wywołań modelu. Dla 30 pytań i 3 wariantów to zwykle kilka dolarów. Dzienny limit wydatków tu nie działa, więc pilnuj limitu na kluczu.
+- Wynik: tabela w terminalu oraz plik `/var/lib/prognozy/porownania/porownanie-<data>.jsonl`. Najlepszy wariant wpisz do `PROGNOZY_FORECAST_MODELS` (zespół) albo `PROGNOZY_MODEL_DEFAULT` (jeden model).
+- Różnice poniżej ok. 2 punktów przy 30 pytaniach to zwykle szum. Przy wątpliwościach uruchom ponownie na innych pytaniach (wybierane są losowo).
+
 ## Aktualizacja
 
 ```bash
@@ -94,13 +121,21 @@ cd /root/prognozy-src && sudo git pull
 sudo bash deploy/install.sh        # klucze i rejestr zostają nietknięte
 ```
 
-Na początku sezonu (styczeń, maj, wrzesień) zaktualizuj też bibliotekę Metaculus, bo w niej są ID nowych turniejów:
+Wersje bibliotek są przypięte w `requirements.lock`, więc instalacja zawsze daje to samo, co przeszło testy.
+
+### Nowy sezon (styczeń, maj, wrzesień)
+
+ID nowego turnieju jest w bibliotece Metaculus `forecasting-tools`. Na komputerze z repo (albo w sesji z Claude):
 
 ```bash
-sudo /opt/prognozy/.venv/bin/pip install --upgrade "forecasting-tools<0.4"
+uv pip compile pyproject.toml --universal --python-version 3.11 -o requirements.lock --upgrade-package forecasting-tools
+pip install -r requirements.lock && pytest      # testy muszą przejść
+git commit -am "Aktualizacja forecasting-tools na nowy sezon" && git push
 ```
 
-Jeśli nowej wersji jeszcze nie ma, ustaw w pliku z kluczami `PROGNOZY_TOURNAMENT=<slug lub ID nowego turnieju>`.
+Potem na serwerze `git pull` i `install.sh` jak wyżej. Jeśli nowej wersji biblioteki jeszcze nie ma, ustaw w pliku z kluczami `PROGNOZY_TOURNAMENT=<slug lub ID nowego turnieju>` i usuń tę linię po aktualizacji.
+
+Na nowy sezon odnów też dostęp do AskNews i sprawdź na Discordzie Metaculus, czy nie zmieniły się zasady.
 
 ## Usunięcie
 

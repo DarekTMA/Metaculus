@@ -12,6 +12,8 @@ from tests.conftest import FakeMetaculusClient, binary_question, numeric_questio
 
 
 class FakeLlm:
+    model = "fake/model"
+
     def __init__(self):
         self.prompts = []
 

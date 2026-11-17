@@ -4,6 +4,7 @@ Przykłady:
     prognozy check                     # sprawdza konfigurację, nic nie wysyła
     prognozy run --mode test           # pytania testowe (bot-testing-area), próba
     prognozy run --mode tournament --publish
+    prognozy porownaj --modele openrouter/openai/gpt-5.4,openrouter/anthropic/claude-opus-5.5
 """
 
 from __future__ import annotations
@@ -49,48 +50,33 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="wysyłaj prognozy (nadpisuje PROGNOZY_PUBLISH)")
     group.add_argument("--dry-run", action="store_true",
                        help="nic nie wysyłaj, tylko pokaż co by poszło")
+    cmp_ = sub.add_parser(
+        "porownaj",
+        help="porównaj modele na otwartych pytaniach spoza turniejów (nic nie wysyła)",
+    )
+    cmp_.add_argument("--modele", required=True,
+                      help="warianty po przecinku; wariant z '+' to zespół, np. a+b")
+    cmp_.add_argument("--pytania", type=int, default=30, help="liczba pytań (domyślnie 30)")
     return parser
 
 
-def _cmd_check(settings: Settings) -> int:
-    problems = missing_requirements()
-    from prognozy.research import default_sources
-
-    sources = [s.name for s in default_sources(settings.search_models)]
-    print(f"Wysyłanie prognoz: {'TAK' if settings.publish else 'NIE (próba)'}")
-    print(f"Katalog stanu: {settings.state_dir}")
-    print(f"Prognoz na pytanie: {settings.predictions_per_question}")
-    print(f"Źródła informacji: {', '.join(sources) if sources else 'BRAK'}")
-    if not sources:
-        problems.append("Brak źródeł informacji: ustaw ASKNEWS_* lub OPENROUTER_API_KEY.")
-    for p in problems:
-        print(f"BŁĄD: {p}")
-    print("OK" if not problems else "Konfiguracja niekompletna.")
-    return 0 if not problems else 1
-
-
-def _cmd_run(settings: Settings, mode: str, publish: bool) -> int:
-    problems = missing_requirements()
-    if problems:
-        for p in problems:
-            logger.error(p)
-        return 1
-
-    from forecasting_tools import MetaculusClient
-
-    from prognozy.bot import PrognozyBot
-    from prognozy.ledger import Ledger
+def _make_researcher(settings: Settings, cache: bool = False):
     from prognozy.research import Researcher, default_sources
-    from prognozy.runner import run_once
 
-    researcher = Researcher(default_sources(settings.search_models), settings.min_research_chars)
-    if not researcher.source_names:
-        logger.error("Brak źródeł informacji. Bot nie będzie prognozował na ślepo.")
-        return 1
+    sources = default_sources(
+        settings.search_models,
+        markets=settings.markets,
+        market_query_model=settings.model_parser,
+    )
+    return Researcher(sources, settings.min_research_chars, cache=cache)
 
-    client = MetaculusClient()
-    bot = PrognozyBot(
+
+def _make_bot(settings: Settings, researcher, client, forecast_models: tuple[str, ...]):
+    from prognozy.bot import PrognozyBot
+
+    return PrognozyBot(
         researcher=researcher,
+        forecast_models=forecast_models,
         research_reports_per_question=1,
         predictions_per_research_report=settings.predictions_per_question,
         publish_reports_to_metaculus=False,  # wysyła Publisher, po kontroli
@@ -102,23 +88,107 @@ def _cmd_run(settings: Settings, mode: str, publish: bool) -> int:
         ),
         metaculus_client=client,
     )
+
+
+def _cmd_check(settings: Settings) -> int:
+    problems = missing_requirements()
+    researcher = _make_researcher(settings)
+    print(f"Wysyłanie prognoz: {'TAK' if settings.publish else 'NIE (próba)'}")
+    print(f"Katalog stanu: {settings.state_dir}")
+    print(f"Prognoz na pytanie: {settings.predictions_per_question}")
+    print(f"Modele prognozy: {', '.join(settings.forecast_models) or settings.model_default or 'domyślny z biblioteki'}")
+    print(f"Źródła informacji: {', '.join(researcher.source_names) or 'BRAK'}")
+    print(f"Powiadomienia (healthcheck): {'TAK' if settings.healthcheck_url else 'NIE'}")
+    print(f"Dzienny limit wydatków: {settings.daily_budget_usd or 'brak'}")
+    if not researcher.has_primary_source:
+        problems.append("Brak głównego źródła informacji: ustaw ASKNEWS_* lub OPENROUTER_API_KEY.")
+    for p in problems:
+        print(f"BŁĄD: {p}")
+    print("OK" if not problems else "Konfiguracja niekompletna.")
+    return 0 if not problems else 1
+
+
+def _cmd_run(settings: Settings, mode: str, publish: bool) -> int:
+    from prognozy.ops import DailyBudget, Healthcheck
+
+    health = Healthcheck(settings.healthcheck_url)
+    health.start()
+    problems = missing_requirements()
+    researcher = _make_researcher(settings)
+    if not researcher.has_primary_source:
+        problems.append("Brak źródeł informacji. Bot nie będzie prognozował na ślepo.")
+    if problems:
+        for p in problems:
+            logger.error(p)
+        health.fail("\n".join(problems))
+        return 1
+
+    from forecasting_tools import MetaculusClient
+
+    from prognozy.ledger import Ledger
+    from prognozy.runner import run_once
+
+    client = MetaculusClient()
+    bot = _make_bot(settings, researcher, client, settings.forecast_models)
     ledger_name = "rejestr-test.sqlite" if mode == "test" else "rejestr.sqlite"
     ledger = Ledger(settings.state_dir / ledger_name)
     logger.info("Start: tryb=%s, wysyłanie=%s, źródła=%s", mode, publish, researcher.source_names)
-    summary = asyncio.run(
-        run_once(
-            bot=bot,
-            client=client,
-            ledger=ledger,
-            tournaments=tournaments_for_mode(mode),
-            dry_run=not publish,
-            # Na pytaniach testowych prognozujemy ponownie, ale rejestr testowy i tak blokuje duble.
-            skip_forecasted=mode != "test",
+    try:
+        summary = asyncio.run(
+            run_once(
+                bot=bot,
+                client=client,
+                ledger=ledger,
+                tournaments=tournaments_for_mode(mode),
+                dry_run=not publish,
+                # Na pytaniach testowych prognozujemy ponownie; rejestr testowy i tak blokuje duble.
+                skip_forecasted=mode != "test",
+                budget=DailyBudget(settings.daily_budget_usd),
+                batch_size=settings.batch_size,
+            )
         )
-    )
-    # Pojedyncze pominięte pytania to nie awaria usługi; awarią jest tylko błąd pobierania.
-    fetch_failed = any("pobieranie pytań" in f for f in summary.failed)
-    return 1 if fetch_failed else 0
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Przejście przerwane błędem.")
+        health.fail(f"{type(exc).__name__}: {exc}")
+        return 1
+    # Pojedyncze pominięte pytania to nie awaria usługi; awaria to brak dostępu do pytań.
+    if summary.fetch_failed:
+        health.fail(summary.report())
+        return 1
+    health.success(summary.report())
+    return 0
+
+
+def _cmd_compare(settings: Settings, variants_arg: str, n: int) -> int:
+    problems = missing_requirements()
+    researcher = _make_researcher(settings, cache=True)
+    if problems or not researcher.has_primary_source:
+        for p in problems or ["Brak źródeł informacji."]:
+            logger.error(p)
+        return 1
+
+    from forecasting_tools import MetaculusClient
+
+    from prognozy.compare import exclude_tournament_questions, run_comparison, save_rows, summarize
+
+    client = MetaculusClient()
+    # Pobieramy więcej, bo część odpadnie (pytania turniejowe / bez CP).
+    questions = client.get_benchmark_questions(n * 2, error_if_question_target_missed=False)
+    forbidden = tournaments_for_mode("tournament") + [TEST_TOURNAMENT]
+    questions = exclude_tournament_questions(questions, forbidden)[:n]
+    if not questions:
+        logger.error("Brak pytań do porównania.")
+        return 1
+    variants = {
+        v: _make_bot(settings, researcher, client, tuple(v.split("+")))
+        for v in (x.strip() for x in variants_arg.split(",")) if v
+    }
+    logger.info("Porównanie: %d pytań, warianty: %s", len(questions), list(variants))
+    rows = asyncio.run(run_comparison(questions, variants))
+    path = save_rows(rows, settings.state_dir / "porownania")
+    print(summarize(rows))
+    print(f"\nSzczegóły: {path}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     if args.command == "check":
         return _cmd_check(settings)
+    if args.command == "porownaj":
+        return _cmd_compare(settings, args.modele, args.pytania)
     publish = settings.publish
     if args.publish:
         publish = True
